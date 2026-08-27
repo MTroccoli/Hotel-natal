@@ -1,0 +1,582 @@
+<title>Ronda</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
+<style>
+:root {
+  --bg: #f5f1eb;
+  --surface: #fffdf7;
+  --surface-alt: #ece8e1;
+  --accent: #c94040;
+  --gold: #9a7518;
+  --active: #2d8f4e;
+  --text: #1c1c26;
+  --text-2: #7a7590;
+  --border: #dbd7ce;
+  --radius: 14px;
+  --shadow: 0 1px 4px rgba(40,30,20,0.06);
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg: #0e0e16;
+    --surface: #1a1a28;
+    --surface-alt: #252536;
+    --accent: #ff6b6b;
+    --gold: #ffd93d;
+    --active: #5ec97a;
+    --text: #ede9e3;
+    --text-2: #8a869a;
+    --border: #2a2a3c;
+    --shadow: 0 1px 4px rgba(0,0,0,0.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg: #0e0e16;
+  --surface: #1a1a28;
+  --surface-alt: #252536;
+  --accent: #ff6b6b;
+  --gold: #ffd93d;
+  --active: #5ec97a;
+  --text: #ede9e3;
+  --text-2: #8a869a;
+  --border: #2a2a3c;
+  --shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:'Outfit',system-ui,-apple-system,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:480px;margin:0 auto;}
+
+/* ── Header ── */
+.header{
+  position:sticky;top:0;z-index:10;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  box-shadow:var(--shadow);
+  padding:16px 16px 14px;
+}
+.header-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:14px;
+}
+.header h1{
+  font-size:22px;font-weight:700;letter-spacing:-0.3px;
+}
+.clock{
+  font-family:'Space Mono',monospace;
+  font-size:14px;color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.stats{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+}
+.stat{text-align:center;}
+.stat-label{
+  display:block;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.8px;
+  color:var(--text-2);margin-bottom:3px;
+}
+.stat-value{
+  font-family:'Space Mono',monospace;
+  font-size:17px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.stat-value.gold{color:var(--gold);}
+
+/* ── People list ── */
+.people-list{
+  padding:10px 12px 24px;
+  display:flex;flex-direction:column;gap:8px;
+}
+
+/* ── Card ── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  transition:opacity 0.3s ease;
+}
+.card.away{opacity:0.5;}
+.card-summary{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 16px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+.card-summary:active{background:var(--surface-alt);}
+.card-info{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;}
+.card-name{
+  font-size:15px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.card.away .card-name{
+  text-decoration:line-through;color:var(--text-2);
+}
+.card-timer-row{display:flex;align-items:center;gap:6px;}
+.pulse-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--active);flex-shrink:0;
+  animation:pulse 2s ease-in-out infinite;
+}
+.dot-off{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text-2);opacity:0.4;flex-shrink:0;
+}
+@keyframes pulse{
+  0%,100%{opacity:0.35;transform:scale(0.85);}
+  50%{opacity:1;transform:scale(1);}
+}
+.timer{
+  font-family:'Space Mono',monospace;
+  font-size:13px;color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.card-end{
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;padding-left:12px;
+}
+.card-total{
+  font-family:'Space Mono',monospace;
+  font-size:17px;font-weight:700;color:var(--gold);
+  font-variant-numeric:tabular-nums;
+}
+.chevron{
+  color:var(--text-2);transition:transform 0.25s ease;
+  flex-shrink:0;
+}
+.card.expanded .chevron{transform:rotate(180deg);}
+
+/* ── Detail (expand/collapse) ── */
+.card-detail{
+  max-height:0;overflow:hidden;
+  transition:max-height 0.3s ease;
+}
+.card.expanded .card-detail{max-height:800px;}
+.detail-inner{
+  padding:0 16px 16px;
+  border-top:1px solid var(--border);
+}
+.arrival-info{
+  font-size:12px;color:var(--text-2);
+  padding:10px 0 8px;
+}
+
+/* ── Items ── */
+.items-list{display:flex;flex-direction:column;gap:2px;}
+.item-row{
+  display:flex;align-items:center;
+  padding:7px 0;
+  border-bottom:1px solid var(--border);
+}
+.item-row:last-child{border-bottom:none;}
+.item-name{
+  flex:1;min-width:0;font-size:14px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.item-right{
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+}
+.item-price{
+  font-family:'Space Mono',monospace;
+  font-size:13px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.item-del{
+  width:28px;height:28px;border:none;
+  background:transparent;color:var(--text-2);
+  font-size:18px;cursor:pointer;
+  border-radius:6px;display:flex;
+  align-items:center;justify-content:center;
+}
+.item-del:hover,.item-del:focus-visible{
+  background:var(--surface-alt);color:var(--accent);
+}
+.empty-items{
+  padding:12px 0;font-size:13px;
+  color:var(--text-2);font-style:italic;
+}
+
+/* ── Add form ── */
+.add-form{
+  display:flex;gap:8px;margin-top:10px;
+}
+.add-form input{
+  height:42px;border:1px solid var(--border);
+  border-radius:10px;padding:0 12px;
+  background:var(--bg);color:var(--text);
+  font-family:inherit;font-size:14px;
+  outline:none;
+}
+.add-form input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.inp-name{flex:1;min-width:0;}
+.inp-price{width:80px;flex-shrink:0;}
+.inp-price::-webkit-inner-spin-button,
+.inp-price::-webkit-outer-spin-button{-webkit-appearance:none;}
+.inp-price{-moz-appearance:textfield;}
+.btn-add-item{
+  width:42px;height:42px;flex-shrink:0;
+  border:none;border-radius:10px;
+  background:var(--accent);color:#fff;
+  font-size:20px;font-weight:700;
+  cursor:pointer;display:flex;
+  align-items:center;justify-content:center;
+}
+.btn-add-item:active{opacity:0.85;}
+
+/* ── Card actions ── */
+.card-actions{
+  display:flex;gap:8px;
+  margin-top:14px;padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.btn-action{
+  flex:1;height:38px;
+  border-radius:8px;border:1px solid var(--border);
+  background:var(--surface-alt);color:var(--text);
+  font-family:inherit;font-size:13px;font-weight:500;
+  cursor:pointer;transition:background 0.15s;
+}
+.btn-action:active{opacity:0.8;}
+.btn-leave{
+  border-color:var(--active);
+  color:var(--active);background:transparent;
+}
+.btn-leave.is-away{
+  border-color:var(--gold);color:var(--gold);
+}
+.btn-remove{
+  border-color:var(--accent);
+  color:var(--accent);background:transparent;
+  flex:0.7;
+}
+
+/* ── Bottom actions ── */
+.bottom-actions{
+  padding:8px 12px 32px;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.btn-add-person{
+  width:100%;max-width:456px;height:48px;
+  border:2px dashed var(--border);border-radius:var(--radius);
+  background:transparent;color:var(--text-2);
+  font-family:inherit;font-size:14px;font-weight:600;
+  cursor:pointer;transition:border-color 0.2s,color 0.2s;
+}
+.btn-add-person:hover,.btn-add-person:focus-visible{
+  border-color:var(--accent);color:var(--accent);
+}
+.btn-reset{
+  border:none;background:transparent;
+  color:var(--text-2);font-family:inherit;
+  font-size:12px;cursor:pointer;
+  padding:4px 8px;border-radius:6px;
+  opacity:0.6;
+}
+.btn-reset:hover{opacity:1;color:var(--accent);}
+
+/* ── Focus ── */
+*:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none !important;transition:none !important;}
+}
+</style>
+
+<div class="wrap">
+  <header class="header">
+    <div class="header-row">
+      <h1>Ronda</h1>
+      <span class="clock" id="clock">--:--</span>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">Total</span>
+        <span class="stat-value gold" id="stat-total">$0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">En mesa</span>
+        <span class="stat-value" id="stat-present">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Promedio</span>
+        <span class="stat-value" id="stat-avg">$0</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="people-list" id="people-list"></main>
+
+  <div class="bottom-actions">
+    <button class="btn-add-person" onclick="addPerson()">+ Agregar persona</button>
+    <button class="btn-reset" onclick="resetAll()">Reiniciar mesa</button>
+  </div>
+</div>
+
+<script>
+let state = { people: [], expandedId: null };
+let nextId = 1;
+let personNum = 1;
+
+function formatTime(ms) {
+  if (ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const p = n => String(n).padStart(2, '0');
+  return h > 0 ? h + ':' + p(m) + ':' + p(sec) : p(m) + ':' + p(sec);
+}
+
+function formatMoney(n) {
+  if (n === 0) return '0';
+  const isInt = n % 1 === 0;
+  if (isInt) return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const parts = n.toFixed(2).split('.');
+  return parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + parts[1];
+}
+
+function elapsed(p) {
+  if (p.leftAt) return p.accumulatedMs;
+  return p.accumulatedMs + (Date.now() - p.arrivedAt);
+}
+
+function mvdTime(ts) {
+  try {
+    return new Date(ts || Date.now()).toLocaleTimeString('es-UY', {
+      timeZone: 'America/Montevideo', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  } catch (e) {
+    const d = new Date(ts || Date.now());
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+}
+
+function esc(s) {
+  const d = document.createElement('span');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function save() {
+  try { localStorage.setItem('ronda-v2', JSON.stringify(state)); } catch(e) {}
+}
+
+function load() {
+  try {
+    const d = localStorage.getItem('ronda-v2');
+    if (d) {
+      const parsed = JSON.parse(d);
+      if (parsed && Array.isArray(parsed.people)) {
+        state = parsed;
+        if (state.people.length > 0) {
+          nextId = Math.max(...state.people.map(p => p.id)) + 1;
+          personNum = Math.max(...state.people.map(p => p.num || 0)) + 1;
+        }
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function createPerson(name) {
+  return {
+    id: nextId++,
+    num: personNum++,
+    name: name,
+    arrivedAt: Date.now(),
+    leftAt: null,
+    accumulatedMs: 0,
+    items: []
+  };
+}
+
+function personTotal(p) {
+  return p.items.reduce((s, i) => s + i.price, 0);
+}
+
+function render() {
+  const list = document.getElementById('people-list');
+  list.innerHTML = state.people.map(renderCard).join('');
+  updateStats();
+}
+
+function renderCard(p) {
+  const exp = p.id === state.expandedId;
+  const here = !p.leftAt;
+  const total = personTotal(p);
+  const dName = p.name || ('Persona ' + p.num);
+
+  const itemsHtml = p.items.length
+    ? p.items.map((it, i) =>
+      '<div class="item-row">' +
+        '<span class="item-name">' + esc(it.name) + '</span>' +
+        '<div class="item-right">' +
+          '<span class="item-price">$' + formatMoney(it.price) + '</span>' +
+          '<button class="item-del" onclick="event.stopPropagation();removeItem(' + p.id + ',' + i + ')" aria-label="Eliminar">&times;</button>' +
+        '</div>' +
+      '</div>'
+    ).join('')
+    : '<div class="empty-items">Sin consumos</div>';
+
+  const arrInfo = 'Llegó: ' + mvdTime(p.arrivedAt) +
+    (p.leftAt ? ' — Se fue: ' + mvdTime(p.leftAt) : '');
+
+  return '<div class="card' + (exp ? ' expanded' : '') + (!here ? ' away' : '') + '" data-id="' + p.id + '">' +
+    '<div class="card-summary" onclick="toggleExpand(' + p.id + ')">' +
+      '<div class="card-info">' +
+        '<span class="card-name">' + esc(dName) + '</span>' +
+        '<div class="card-timer-row">' +
+          (here ? '<span class="pulse-dot"></span>' : '<span class="dot-off"></span>') +
+          '<span class="timer" data-timer="' + p.id + '">' + formatTime(elapsed(p)) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-end">' +
+        '<span class="card-total" data-total="' + p.id + '">$' + formatMoney(total) + '</span>' +
+        '<svg class="chevron" width="12" height="12" viewBox="0 0 12 12"><polyline points="2,4 6,8 10,4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card-detail">' +
+      '<div class="detail-inner">' +
+        '<div class="arrival-info">' + arrInfo + '</div>' +
+        '<div class="items-list">' + itemsHtml + '</div>' +
+        '<form class="add-form" onsubmit="addItem(event,' + p.id + ')">' +
+          '<input type="text" class="inp-name" placeholder="¿Qué pidió?" required autocomplete="off">' +
+          '<input type="number" class="inp-price" placeholder="$" step="any" min="0" required>' +
+          '<button type="submit" class="btn-add-item">+</button>' +
+        '</form>' +
+        '<div class="card-actions">' +
+          '<button class="btn-action btn-rename" onclick="event.stopPropagation();editName(' + p.id + ')">Nombre</button>' +
+          '<button class="btn-action btn-leave' + (p.leftAt ? ' is-away' : '') + '" onclick="event.stopPropagation();toggleLeave(' + p.id + ')">' +
+            (p.leftAt ? 'Volvió' : 'Se fue') +
+          '</button>' +
+          '<button class="btn-action btn-remove" onclick="event.stopPropagation();removePerson(' + p.id + ')">Quitar</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function updateStats() {
+  const present = state.people.filter(p => !p.leftAt);
+  const total = state.people.reduce((s, p) => s + personTotal(p), 0);
+  const avg = present.length > 0 ? total / present.length : 0;
+  document.getElementById('stat-total').textContent = '$' + formatMoney(total);
+  document.getElementById('stat-present').textContent = present.length;
+  document.getElementById('stat-avg').textContent = '$' + formatMoney(Math.round(avg));
+  document.getElementById('clock').textContent = mvdTime();
+}
+
+function toggleExpand(id) {
+  state.expandedId = state.expandedId === id ? null : id;
+  render();
+}
+
+function addItem(event, pid) {
+  event.preventDefault();
+  const form = event.target;
+  const nm = form.querySelector('.inp-name').value.trim();
+  const pr = parseFloat(form.querySelector('.inp-price').value);
+  if (!nm || isNaN(pr) || pr < 0) return;
+  const person = state.people.find(p => p.id === pid);
+  if (!person) return;
+  person.items.push({ name: nm, price: pr });
+  save();
+  render();
+  requestAnimationFrame(() => {
+    const card = document.querySelector('[data-id="' + pid + '"]');
+    if (card) { const inp = card.querySelector('.inp-name'); if (inp) inp.focus(); }
+  });
+}
+
+function removeItem(pid, idx) {
+  const person = state.people.find(p => p.id === pid);
+  if (!person) return;
+  person.items.splice(idx, 1);
+  save();
+  render();
+}
+
+function editName(id) {
+  const person = state.people.find(p => p.id === id);
+  if (!person) return;
+  const nm = prompt('Nombre:', person.name || '');
+  if (nm === null) return;
+  person.name = nm.trim();
+  save();
+  render();
+}
+
+function toggleLeave(id) {
+  const person = state.people.find(p => p.id === id);
+  if (!person) return;
+  if (person.leftAt) {
+    person.arrivedAt = Date.now();
+    person.leftAt = null;
+  } else {
+    person.accumulatedMs += Date.now() - person.arrivedAt;
+    person.leftAt = Date.now();
+  }
+  save();
+  render();
+}
+
+function addPerson() {
+  const nm = prompt('Nombre (opcional):');
+  if (nm === null) return;
+  state.people.push(createPerson(nm.trim()));
+  save();
+  render();
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+function removePerson(id) {
+  const person = state.people.find(p => p.id === id);
+  if (!person) return;
+  const dn = person.name || ('Persona ' + person.num);
+  if (!confirm('¿Quitar a ' + dn + '?')) return;
+  state.people = state.people.filter(p => p.id !== id);
+  if (state.expandedId === id) state.expandedId = null;
+  save();
+  render();
+}
+
+function resetAll() {
+  if (!confirm('¿Reiniciar todo? Se pierden todos los datos.')) return;
+  nextId = 1; personNum = 1;
+  state = { people: [], expandedId: null };
+  for (let i = 0; i < 8; i++) state.people.push(createPerson(''));
+  save();
+  render();
+}
+
+function tick() {
+  state.people.forEach(p => {
+    if (!p.leftAt) {
+      const el = document.querySelector('[data-timer="' + p.id + '"]');
+      if (el) el.textContent = formatTime(elapsed(p));
+    }
+  });
+  updateStats();
+}
+
+(function init() {
+  if (!load()) {
+    for (let i = 0; i < 8; i++) state.people.push(createPerson(''));
+  }
+  render();
+  setInterval(tick, 1000);
+})();
+</script>
