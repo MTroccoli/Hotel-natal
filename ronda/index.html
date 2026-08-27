@@ -383,6 +383,37 @@ input[type=number]{-moz-appearance:textfield;}
 .reset-btn{border:none;background:transparent;color:var(--text-2);font-family:inherit;font-size:12px;cursor:pointer;opacity:.6;padding:4px 8px;}
 .reset-btn:active{color:var(--accent);opacity:1;}
 
+/* ── Confirm dialog ── */
+.confirm-overlay{align-items:center;z-index:70;padding:20px;}
+.confirm-box{
+  width:100%;max-width:390px;background:var(--surface);border-radius:18px;
+  box-shadow:var(--shadow-lg);padding:20px;animation:pop .18s ease;
+}
+@keyframes pop{from{transform:scale(.94);opacity:0;}to{transform:scale(1);opacity:1;}}
+.confirm-box h3{font-size:18px;font-weight:700;margin-bottom:3px;}
+.confirm-box .cf-sub{font-size:12.5px;color:var(--text-2);margin-bottom:15px;}
+.cf-item{
+  display:flex;align-items:center;gap:11px;padding:11px 13px;
+  background:var(--surface-2);border-radius:12px;margin-bottom:8px;
+}
+.cf-emoji{font-size:23px;flex-shrink:0;}
+.cf-main{flex:1;min-width:0;}
+.cf-title{font-size:15px;font-weight:700;}
+.cf-desc{font-size:12px;color:var(--text-2);margin-top:1px;}
+.cf-amount{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;}
+.cf-people{font-size:12.5px;color:var(--shared);font-weight:600;margin:0 2px 4px;line-height:1.6;}
+.cf-total{
+  display:flex;justify-content:space-between;align-items:center;
+  padding-top:11px;border-top:1px solid var(--border);margin-top:6px;
+  font-size:13px;color:var(--text-2);
+}
+.cf-total b{font-size:19px;color:var(--gold);font-family:'Space Mono',monospace;}
+.cf-actions{display:flex;gap:9px;margin-top:17px;}
+.cf-btn{flex:1;height:48px;border-radius:12px;border:none;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;}
+.cf-btn.no{background:var(--surface-2);color:var(--text);flex:.7;}
+.cf-btn.yes{background:var(--active);color:#fff;}
+.cf-btn.yes:active{opacity:.88;}
+
 *:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -444,6 +475,11 @@ input[type=number]{-moz-appearance:textfield;}
   <div class="sheet" id="sheet"></div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Confirm dialog -->
+<div class="overlay confirm-overlay" id="confirmOverlay" onclick="if(event.target===this)closeConfirm()">
+  <div class="confirm-box" id="confirmBox"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -642,13 +678,36 @@ function removePerson(id){const p=state.people.find(x=>x.id===id);if(!p)return;
   save();render();}
 
 /* ── order actions ── */
+/* ── Confirmación con resumen ── */
+let _confirmYes=null;
+function askConfirm(html,onYes){
+  _confirmYes=onYes;
+  document.getElementById('confirmBox').innerHTML=html+
+    '<div class="cf-actions">'+
+      '<button class="cf-btn no" onclick="closeConfirm()">Cancelar</button>'+
+      '<button class="cf-btn yes" onclick="okConfirm()">Confirmar</button>'+
+    '</div>';
+  document.getElementById('confirmOverlay').classList.add('show');
+}
+function closeConfirm(){document.getElementById('confirmOverlay').classList.remove('show');_confirmYes=null;}
+function okConfirm(){const f=_confirmYes;closeConfirm();if(f)f();}
+function pname(id){const p=state.people.find(x=>x.id===id);return p?(p.name||('Persona '+p.num)):'?';}
+
 function quickAdd(pid,prodId){
   const pr=state.products.find(x=>x.id===prodId);if(!pr)return;
-  // find existing individual order for this person + product name
   const ex=state.orders.find(o=>o.people.length===1&&o.people[0]===pid&&o.name===pr.name&&o.unitPrice===pr.price);
-  if(ex){ex.qty++;}
-  else{state.orders.push({id:uid(),name:pr.name,unitPrice:pr.price,qty:1,people:[pid]});}
-  save();render();
+  const nextQty=ex?ex.qty+1:1;
+  const html='<h3>¿Cargar este ítem?</h3><div class="cf-sub">Revisá antes de sumarlo a la cuenta.</div>'+
+    '<div class="cf-item"><span class="cf-emoji">'+esc(pr.emoji||'🍽️')+'</span>'+
+      '<div class="cf-main"><div class="cf-title">'+esc(pr.name)+'</div>'+
+        '<div class="cf-desc">para '+esc(pname(pid))+(ex?' · pasa a llevar '+nextQty:'')+'</div></div>'+
+      '<span class="cf-amount">+$'+money(pr.price)+'</span></div>'+
+    '<div class="cf-total"><span>Suma a '+esc(pname(pid))+'</span><b>$'+money(pr.price)+'</b></div>';
+  askConfirm(html,function(){
+    if(ex)ex.qty++; else state.orders.push({id:uid(),name:pr.name,unitPrice:pr.price,qty:1,people:[pid]});
+    save();render();
+    toast(pr.name+' → '+pname(pid));
+  });
 }
 function stepQty(oid,d){const o=state.orders.find(x=>x.id===oid);if(!o)return;
   o.qty+=d; if(o.qty<=0){state.orders=state.orders.filter(x=>x.id!==oid);} save();render();}
@@ -768,17 +827,40 @@ function addIndividual(pid,prod,n){
 function confirmLoad(){
   const prod=curProd();
   if(!(prod.price>0))return;
+  const emoji=esc(prod.emoji||'🍽️');
   if(sh.mode==='ind'){
-    let any=false;
-    Object.keys(sh.counts).forEach(pid=>{const n=sh.counts[pid];if(n>0){addIndividual(+pid,prod,n);any=true;}});
-    if(!any)return;
-    sh.counts={};
+    const entries=Object.keys(sh.counts).map(pid=>[+pid,sh.counts[pid]]).filter(e=>e[1]>0);
+    if(!entries.length)return;
+    const units=entries.reduce((s,e)=>s+e[1],0), total=prod.price*units;
+    const rows=entries.map(e=>'<div class="cf-people">• '+esc(pname(e[0]))+' ×'+e[1]+' <span class="ind-sub">($'+money(prod.price*e[1])+')</span></div>').join('');
+    const html='<h3>¿Cargar esta ronda?</h3><div class="cf-sub">Cada uno lo suyo — revisá el detalle.</div>'+
+      '<div class="cf-item"><span class="cf-emoji">'+emoji+'</span>'+
+        '<div class="cf-main"><div class="cf-title">'+esc(prod.name)+'</div>'+
+          '<div class="cf-desc">'+units+' unidad'+(units===1?'':'es')+' · $'+money(prod.price)+' c/u</div></div></div>'+
+      rows+
+      '<div class="cf-total"><span>Total de la ronda</span><b>$'+money(total)+'</b></div>';
+    askConfirm(html,function(){
+      entries.forEach(e=>addIndividual(e[0],prod,e[1]));
+      sh.counts={}; save();render();drawSheet();
+      toast('Cargado: '+prod.name+' ×'+units);
+    });
   } else {
     if(sh.people.length===0)return;
-    state.orders.push({id:uid(),name:prod.name,unitPrice:prod.price,qty:sh.qty,people:sh.people.slice()});
-    sh.qty=1;
+    const total=prod.price*sh.qty, per=total/sh.people.length;
+    const names=sh.people.map(pname).join(', ');
+    const html='<h3>¿Cargar compartido?</h3><div class="cf-sub">Dividido en partes iguales.</div>'+
+      '<div class="cf-item"><span class="cf-emoji">'+emoji+'</span>'+
+        '<div class="cf-main"><div class="cf-title">'+esc(prod.name)+' ×'+sh.qty+'</div>'+
+          '<div class="cf-desc">entre '+sh.people.length+' persona'+(sh.people.length===1?'':'s')+'</div></div>'+
+        '<span class="cf-amount">$'+money(total)+'</span></div>'+
+      '<div class="cf-people">'+esc(names)+'</div>'+
+      '<div class="cf-total"><span>Le toca a c/u</span><b>$'+money(per)+'</b></div>';
+    askConfirm(html,function(){
+      state.orders.push({id:uid(),name:prod.name,unitPrice:prod.price,qty:sh.qty,people:sh.people.slice()});
+      sh.qty=1; save();render();drawSheet();
+      toast('Compartido cargado: '+prod.name);
+    });
   }
-  save();render();drawSheet();
 }
 
 /* ── views ── */
