@@ -1,5 +1,11 @@
 <title>Ronda</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ronda">
+<meta name="theme-color" content="#fffdf8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap">
 <style>
 :root {
@@ -65,7 +71,11 @@ body{
   min-height:100vh;-webkit-font-smoothing:antialiased;
   padding-bottom:76px;
 }
-.wrap{max-width:520px;margin:0 auto;}
+.wrap{max-width:520px;margin:0 auto;min-height:100vh;min-height:100dvh;}
+@media(min-width:560px){
+  body{background:var(--surface-2);}
+  .wrap{background:var(--bg);box-shadow:0 0 0 1px var(--border),var(--shadow-lg);}
+}
 .mono{font-family:'Space Mono',monospace;font-variant-numeric:tabular-nums;}
 
 /* ── Header ── */
@@ -257,7 +267,8 @@ input[type=number]{-moz-appearance:textfield;}
 
 /* ── Bottom nav ── */
 .nav{
-  position:fixed;bottom:0;left:0;right:0;z-index:30;
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:520px;z-index:30;
   background:var(--surface);border-top:1px solid var(--border);
   display:flex;box-shadow:0 -2px 12px rgba(40,30,15,0.08);
   padding-bottom:env(safe-area-inset-bottom,0);
@@ -288,6 +299,35 @@ input[type=number]{-moz-appearance:textfield;}
 .sheet h2{font-size:18px;font-weight:700;margin-bottom:3px;}
 .sheet .desc{font-size:13px;color:var(--text-2);margin-bottom:16px;}
 .field-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--text-2);margin:14px 0 8px;}
+.seg{display:flex;background:var(--surface-2);border-radius:11px;padding:3px;gap:3px;}
+.seg button{
+  flex:1;height:38px;border:none;border-radius:8px;background:transparent;
+  font-family:inherit;font-size:13.5px;font-weight:600;color:var(--text-2);cursor:pointer;
+}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow);}
+.ronda-btn{
+  width:100%;height:40px;border:1px dashed var(--shared);background:transparent;color:var(--shared);
+  border-radius:10px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:10px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.ronda-btn:active{background:var(--shared-soft);}
+.ind-list{display:flex;flex-direction:column;gap:6px;}
+.ind-row{
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface-2);border-radius:11px;padding:7px 9px 7px 11px;
+}
+.ind-row .pav{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+.ind-name{flex:1;min-width:0;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ind-row.gone .ind-name{color:var(--text-2);}
+.ind-sub{font-size:11px;color:var(--text-2);font-weight:400;}
+.ind-step{display:flex;align-items:center;gap:4px;flex-shrink:0;}
+.ind-step button{
+  width:32px;height:32px;border-radius:9px;border:1px solid var(--border);background:var(--surface);
+  color:var(--text);font-size:18px;line-height:1;cursor:pointer;
+}
+.ind-step button:disabled{opacity:.35;}
+.ind-count{min-width:26px;text-align:center;font-size:16px;font-weight:700;}
+.ind-count.zero{color:var(--text-2);opacity:.5;}
 .people-pick{display:flex;flex-wrap:wrap;gap:7px;}
 .pick{
   border:1px solid var(--border);background:var(--chip);color:var(--text);
@@ -339,7 +379,7 @@ input[type=number]{-moz-appearance:textfield;}
     <div class="people" id="people"></div>
     <div class="list-actions">
       <button class="big-btn ghost" onclick="addPerson()">+ Persona</button>
-      <button class="big-btn solid" onclick="openShared()">Compartido ⁝</button>
+      <button class="big-btn solid" onclick="openLoad()">＋ Cargar a la mesa</button>
     </div>
   </section>
 
@@ -369,7 +409,7 @@ input[type=number]{-moz-appearance:textfield;}
 </nav>
 
 <!-- Shared modal -->
-<div class="overlay" id="overlay" onclick="if(event.target===this)closeShared()">
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()">
   <div class="sheet" id="sheet"></div>
 </div>
 
@@ -596,54 +636,108 @@ function delProduct(id){const pr=state.products.find(x=>x.id===id);if(!pr)return
   if(!confirm('¿Eliminar "'+pr.name+'" del menú? (No borra consumos ya cargados)'))return;
   state.products=state.products.filter(x=>x.id!==id);save();renderMenu();render();}
 
-/* ── shared sheet ── */
-let sh={prodId:null,qty:1,people:[]};
-function openShared(){
-  if(state.products.length===0){showView('menu');alert('Primero cargá productos en el Menú.');return;}
-  if(state.people.length===0){alert('Agregá personas primero.');return;}
-  sh={prodId:state.products[0].id,qty:1,people:state.people.map(p=>p.id)};
+/* ── cargar a la mesa (producto primero) ── */
+let sh={prodId:null,mode:'ind',qty:1,people:[],counts:{}};
+function openLoad(){
+  if(state.products.length===0){showView('menu');setTimeout(()=>alert('Primero cargá productos en el Menú.'),50);return;}
+  if(state.people.length===0){alert('Agregá personas primero (botón + Persona).');return;}
+  sh={prodId:state.products[0].id,mode:'ind',qty:1,people:state.people.map(p=>p.id),counts:{}};
   drawSheet();document.getElementById('overlay').classList.add('show');
 }
-function closeShared(){document.getElementById('overlay').classList.remove('show');}
+function closeSheet(){document.getElementById('overlay').classList.remove('show');}
+function curProd(){return state.products.find(x=>x.id===sh.prodId)||state.products[0];}
+function indQty(pid,prod){const o=state.orders.find(x=>x.people.length===1&&x.people[0]===pid&&x.name===prod.name&&x.unitPrice===prod.price);return o?o.qty:0;}
+
 function drawSheet(){
-  const prod=state.products.find(x=>x.id===sh.prodId)||state.products[0];
-  const total=prod.price*sh.qty;
-  const per=sh.people.length? total/sh.people.length : 0;
+  const prod=curProd();
+  const noPrice=!(prod.price>0);
   const prodChips=state.products.map(pr=>
-    '<button class="pick'+(pr.id===sh.prodId?' sel':'')+'" onclick="shPick('+pr.id+')">'+esc(pr.emoji||'•')+' '+esc(pr.name)+'</button>'
+    '<button class="pick'+(pr.id===sh.prodId?' sel':'')+'" onclick="shPick('+pr.id+')">'+esc(pr.emoji||'•')+' '+esc(pr.name)+' <span class="ind-sub">$'+money(pr.price)+'</span></button>'
   ).join('');
-  const peoplePick=state.people.map(p=>
-    '<button class="pick'+(sh.people.includes(p.id)?' sel':'')+'" onclick="shTogglePerson('+p.id+')">'+
-      '<span class="pav" style="background:'+avColor(p.id)+'">'+esc(initials(p.name,p.num))+'</span>'+esc(p.name||('Persona '+p.num))+
-    '</button>'
-  ).join('');
-  const allSel=sh.people.length===state.people.length;
+  const seg=
+    '<div class="seg">'+
+      '<button class="'+(sh.mode==='ind'?'on':'')+'" onclick="shMode(\'ind\')">Cada uno lo suyo</button>'+
+      '<button class="'+(sh.mode==='shared'?'on':'')+'" onclick="shMode(\'shared\')">Compartido</button>'+
+    '</div>';
+
+  let body='', preview='', canConfirm=false;
+
+  if(sh.mode==='ind'){
+    const rows=state.people.map(p=>{
+      const c=sh.counts[p.id]||0, has=indQty(p.id,prod), gone=!!p.leftAt;
+      return '<div class="ind-row'+(gone?' gone':'')+'">'+
+        '<span class="pav" style="background:'+avColor(p.id)+'">'+esc(initials(p.name,p.num))+'</span>'+
+        '<span class="ind-name">'+esc(p.name||('Persona '+p.num))+(has?' <span class="ind-sub">lleva '+has+'</span>':'')+'</span>'+
+        '<div class="ind-step">'+
+          '<button onclick="shCount('+p.id+',-1)"'+(c<=0?' disabled':'')+'>−</button>'+
+          '<span class="ind-count'+(c<=0?' zero':'')+' mono">'+c+'</span>'+
+          '<button onclick="shCount('+p.id+',1)">+</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+    body='<button class="ronda-btn" onclick="shRonda()">🍻 Ronda: +1 a todos</button>'+
+         '<div class="ind-list">'+rows+'</div>';
+    const units=Object.values(sh.counts).reduce((s,n)=>s+(n>0?n:0),0);
+    canConfirm=units>0&&!noPrice;
+    preview='<div class="share-preview"><span>'+units+' unidad'+(units===1?'':'es')+' para '+Object.values(sh.counts).filter(n=>n>0).length+' persona(s)</span><span>total <b>$'+money(prod.price*units)+'</b></span></div>';
+  } else {
+    const peoplePick=state.people.map(p=>
+      '<button class="pick'+(sh.people.includes(p.id)?' sel':'')+'" onclick="shTogglePerson('+p.id+')">'+
+        '<span class="pav" style="background:'+avColor(p.id)+'">'+esc(initials(p.name,p.num))+'</span>'+esc(p.name||('Persona '+p.num))+
+      '</button>'
+    ).join('');
+    const allSel=sh.people.length===state.people.length;
+    const total=prod.price*sh.qty, per=sh.people.length?total/sh.people.length:0;
+    body='<div class="field-label">Cantidad</div>'+
+      '<div class="qty-big"><button onclick="shQty(-1)">−</button><span class="n mono">'+sh.qty+'</span><button onclick="shQty(1)">+</button></div>'+
+      '<div class="field-label">¿Entre quiénes?</div>'+
+      '<div class="people-pick">'+peoplePick+'</div>'+
+      '<button class="pick-all" onclick="shAll()">'+(allSel?'Ninguno':'Seleccionar todos')+'</button>';
+    canConfirm=sh.people.length>0&&!noPrice;
+    preview='<div class="share-preview"><span>'+sh.people.length+' persona'+(sh.people.length===1?'':'s')+' · total $'+money(total)+'</span><span>c/u <b>$'+money(per)+'</b></span></div>';
+  }
+
+  const priceWarn=noPrice?'<div class="share-preview" style="color:var(--accent)"><span>Este producto no tiene precio.</span><button class="pick-all" style="color:var(--accent);margin:0" onclick="closeSheet();showView(\'menu\')">Ponelo en el Menú →</button></div>':'';
+
   document.getElementById('sheet').innerHTML=
     '<div class="grabber"></div>'+
-    '<h2>Cargar compartido</h2>'+
-    '<p class="desc">Un ítem dividido en partes iguales entre quienes lo comparten.</p>'+
+    '<h2>Cargar a la mesa</h2>'+
+    '<p class="desc">Elegí el producto una vez y repartilo entre la mesa, sin escribir.</p>'+
     '<div class="field-label">Producto</div>'+
     '<div class="people-pick">'+prodChips+'</div>'+
-    '<div class="field-label">Cantidad</div>'+
-    '<div class="qty-big"><button onclick="shQty(-1)">−</button><span class="n mono">'+sh.qty+'</span><button onclick="shQty(1)">+</button></div>'+
-    '<div class="field-label">¿Entre quiénes?</div>'+
-    '<div class="people-pick">'+peoplePick+'</div>'+
-    '<button class="pick-all" onclick="shAll()">'+(allSel?'Ninguno':'Seleccionar todos')+'</button>'+
-    '<div class="share-preview"><span>'+sh.people.length+' persona'+(sh.people.length===1?'':'s')+' · total $'+money(total)+'</span><span>c/u <b>$'+money(per)+'</b></span></div>'+
+    '<div class="field-label">¿Cómo se reparte?</div>'+seg+
+    '<div style="margin-top:14px">'+body+'</div>'+
+    priceWarn+preview+
     '<div class="sheet-actions">'+
-      '<button class="sheet-btn cancel" onclick="closeShared()">Cancelar</button>'+
-      '<button class="sheet-btn confirm" '+(sh.people.length&&prod.price>0?'':'disabled')+' onclick="confirmShared()">Agregar</button>'+
+      '<button class="sheet-btn cancel" onclick="closeSheet()">Listo</button>'+
+      '<button class="sheet-btn confirm" '+(canConfirm?'':'disabled')+' onclick="confirmLoad()">Agregar</button>'+
     '</div>';
 }
-function shPick(id){sh.prodId=id;drawSheet();}
+function shPick(id){sh.prodId=id;sh.counts={};drawSheet();}
+function shMode(m){sh.mode=m;drawSheet();}
+function shCount(pid,d){const c=(sh.counts[pid]||0)+d;sh.counts[pid]=c<0?0:c;drawSheet();}
+function shRonda(){state.people.forEach(p=>{if(!p.leftAt)sh.counts[p.id]=(sh.counts[p.id]||0)+1;});drawSheet();}
 function shQty(d){sh.qty=Math.max(1,sh.qty+d);drawSheet();}
 function shTogglePerson(id){sh.people.includes(id)?sh.people=sh.people.filter(x=>x!==id):sh.people.push(id);drawSheet();}
 function shAll(){sh.people=sh.people.length===state.people.length?[]:state.people.map(p=>p.id);drawSheet();}
-function confirmShared(){
-  const prod=state.products.find(x=>x.id===sh.prodId);
-  if(!prod||sh.people.length===0||prod.price<=0)return;
-  state.orders.push({id:uid(),name:prod.name,unitPrice:prod.price,qty:sh.qty,people:sh.people.slice()});
-  save();closeShared();render();
+function addIndividual(pid,prod,n){
+  const ex=state.orders.find(o=>o.people.length===1&&o.people[0]===pid&&o.name===prod.name&&o.unitPrice===prod.price);
+  if(ex)ex.qty+=n; else state.orders.push({id:uid(),name:prod.name,unitPrice:prod.price,qty:n,people:[pid]});
+}
+function confirmLoad(){
+  const prod=curProd();
+  if(!(prod.price>0))return;
+  if(sh.mode==='ind'){
+    let any=false;
+    Object.keys(sh.counts).forEach(pid=>{const n=sh.counts[pid];if(n>0){addIndividual(+pid,prod,n);any=true;}});
+    if(!any)return;
+    sh.counts={};
+  } else {
+    if(sh.people.length===0)return;
+    state.orders.push({id:uid(),name:prod.name,unitPrice:prod.price,qty:sh.qty,people:sh.people.slice()});
+    sh.qty=1;
+  }
+  save();render();drawSheet();
 }
 
 /* ── views ── */
