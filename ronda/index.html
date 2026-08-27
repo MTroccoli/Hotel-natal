@@ -65,6 +65,10 @@
 
 *{margin:0;padding:0;box-sizing:border-box;}
 html{-webkit-text-size-adjust:100%;}
+button,input,.chip,.pick,.seg button,label,a{touch-action:manipulation;}
+@media(pointer:coarse){
+  .name-input,.prod-name,.prod-price,.add-prod input{font-size:16px;}
+}
 body{
   font-family:'Outfit',system-ui,-apple-system,sans-serif;
   background:var(--bg);color:var(--text);
