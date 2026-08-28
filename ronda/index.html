@@ -457,6 +457,17 @@ input[type=number]{-moz-appearance:textfield;}
 .bill-name{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bill-qty{font-family:'Space Mono',monospace;font-size:12px;color:var(--text-2);flex-shrink:0;}
 .bill-sub{font-family:'Space Mono',monospace;font-weight:700;font-size:14px;min-width:66px;text-align:right;flex-shrink:0;}
+.hist-list{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
+.hist-row{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:12px 13px;border:1px solid var(--border);border-radius:12px;
+  background:var(--surface-2);cursor:pointer;font-family:inherit;
+}
+.hist-row:active{opacity:.85;}
+.hist-main{flex:1;min-width:0;}
+.hist-date{font-size:14px;font-weight:700;color:var(--text);}
+.hist-sub{font-size:12px;color:var(--text-2);margin-top:1px;}
+.hist-amt{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;}
 .liq-grand{
   display:flex;justify-content:space-between;align-items:center;margin-top:14px;
   padding:13px 15px;background:var(--surface-2);border-radius:12px;
@@ -1088,7 +1099,9 @@ function drawCloud(){
        '<button class="sheet-btn confirm" style="width:100%" onclick="createEvent()">Crear mesa online y subir lo cargado</button>'+
        '<div class="field-label">¿Ya tenés un código?</div>'+joinBox;
   }
-  h+='<div class="field-label">Copia de seguridad (sin internet)</div>'+
+  h+='<div class="field-label">Historial</div>'+
+     '<button class="sheet-btn cancel" style="width:100%" onclick="openHistory()">📖 Ver historial de cierres</button>'+
+     '<div class="field-label">Copia de seguridad (sin internet)</div>'+
      '<div class="sheet-actions" style="margin-top:0">'+
        '<button class="sheet-btn cancel" style="flex:1" onclick="exportData()">Exportar</button>'+
        '<button class="sheet-btn cancel" style="flex:1" onclick="importPrompt()">Importar</button></div>'+
@@ -1176,9 +1189,10 @@ function drawSettle(){
       '<button class="sheet-btn confirm" style="background:var(--gold);color:#231c00" onclick="copySummary()">Copiar resumen</button>'+
     '</div>'+
     '<div class="sheet-actions" style="margin-top:9px">'+
-      '<button class="sheet-btn cancel" style="flex:1" onclick="closeSheet()">Volver</button>'+
-      '<button class="sheet-btn" style="flex:1;background:transparent;border:1px solid var(--accent);color:var(--accent)" onclick="askEmptyMesa()">Vaciar mesa</button>'+
-    '</div>';
+      '<button class="sheet-btn cancel" style="flex:1" onclick="openHistory()">📖 Historial</button>'+
+      '<button class="sheet-btn" style="flex:1;background:var(--accent);color:#fff" onclick="askCloseMesa()">Cerrar mesa</button>'+
+    '</div>'+
+    '<div class="reset-line" style="margin-top:10px"><button class="reset-btn" onclick="closeSheet()">Volver sin cerrar</button></div>';
 }
 function copySummary(){
   const adj=(settleOverride&&settleOverride>0);
@@ -1192,14 +1206,106 @@ function copySummary(){
   txt+='\n————\nLa cuenta:\n'+bill.join('\n')+'\nSuma: $'+money(tableTotal());
   copyText(txt,'Resumen copiado');
 }
-function askEmptyMesa(){
-  const html='<h3>¿Vaciar la mesa?</h3>'+
-    '<div class="cf-sub">Se borran todos los consumos y se reinician los cronómetros para empezar una ronda nueva. Las personas y el menú se mantienen.'+(cloud?' Afecta a TODOS en la mesa online.':'')+'</div>';
-  askConfirm(html,function(){
+function buildClosure(){
+  return {
+    closed_at:new Date().toISOString(),
+    code:cloud?cloud.code:null,
+    total:tableTotal(), grand:settleGrand(), tip:settleTip, override:settleOverride||null,
+    people:settleRows().map(function(r){return {name:r.p.name||('Persona '+r.p.num),num:r.p.num,amt:r.amt,pct:r.pct,ms:elapsed(r.p)};}),
+    bill:billLines().map(function(b){return {name:b.name,qty:b.qty,price:b.price,sub:b.sub,emoji:b.emoji};})
+  };
+}
+async function saveClosure(snap){
+  if(cloud&&sb){
+    try{
+      const {error}=await sb.from('ronda_closures').insert({event_id:cloud.eventId,code:snap.code,closed_at:snap.closed_at,total:snap.total,grand:snap.grand,tip:snap.tip,override:snap.override,data:{people:snap.people,bill:snap.bill}});
+      if(!error)return true;
+    }catch(e){}
+  }
+  try{
+    const h=JSON.parse(localStorage.getItem('ronda-history')||'[]');
+    h.unshift(snap); localStorage.setItem('ronda-history',JSON.stringify(h.slice(0,100)));
+  }catch(e){}
+  return true;
+}
+function askCloseMesa(){
+  const html='<h3>¿Cerrar la mesa?</h3>'+
+    '<div class="cf-sub">Se guarda esta liquidación en el <b>historial</b> y se vacía la mesa (se borran los consumos y se reinician los cronómetros). Las personas y el menú se mantienen.'+(cloud?' Afecta a TODOS en la mesa online.':'')+'</div>';
+  askConfirm(html,async function(){
+    const snap=buildClosure();
+    await saveClosure(snap);
     state.orders=[];
     state.people.forEach(function(p){p.arrivedAt=Date.now();p.leftAt=null;p.accumulatedMs=0;});
-    save();render();closeSheet();toast('Mesa vaciada — nueva ronda');
+    save();render();closeSheet();toast('Mesa cerrada y guardada en el historial');
   });
+}
+
+/* ── Historial de cierres ── */
+let histCache=[];
+function histDate(iso){try{return new Date(iso).toLocaleString('es-UY',{timeZone:'America/Montevideo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}catch(e){return iso;}}
+async function loadClosures(){
+  if(cloud&&sb){
+    try{
+      const {data,error}=await sb.from('ronda_closures').select('*').eq('event_id',cloud.eventId).order('closed_at',{ascending:false}).limit(100);
+      if(error)throw error;
+      return (data||[]).map(function(r){return {id:r.id,closed_at:r.closed_at,code:r.code,total:Number(r.total),grand:Number(r.grand),tip:r.tip,override:r.override!=null?Number(r.override):null,people:(r.data&&r.data.people)||[],bill:(r.data&&r.data.bill)||[]};});
+    }catch(e){}
+  }
+  try{return JSON.parse(localStorage.getItem('ronda-history')||'[]');}catch(e){return [];}
+}
+async function openHistory(){
+  document.getElementById('sheet').innerHTML='<div class="grabber"></div><h2>Historial de cierres</h2><p class="desc">Cargando…</p>';
+  document.getElementById('overlay').classList.add('show');
+  histCache=await loadClosures();
+  drawHistory();
+}
+function drawHistory(){
+  const rows=histCache.length? histCache.map(function(c,i){
+    return '<button class="hist-row" onclick="openClosure('+i+')">'+
+      '<div class="hist-main"><div class="hist-date">'+esc(histDate(c.closed_at))+'</div>'+
+        '<div class="hist-sub">'+(c.people?c.people.length:0)+' personas'+(c.tip?' · '+c.tip+'% prop.':'')+(c.override?' · ajustada':'')+'</div></div>'+
+      '<span class="hist-amt">$'+money(c.grand)+'</span>'+
+      '<svg width="12" height="12" viewBox="0 0 12 12" style="color:var(--text-2);flex-shrink:0"><polyline points="4,2 8,6 4,10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'+
+    '</button>';
+  }).join('') : '<div class="empty">Todavía no cerraste ninguna mesa.</div>';
+  document.getElementById('sheet').innerHTML=
+    '<div class="grabber"></div><h2>Historial de cierres</h2>'+
+    '<p class="desc">'+(cloud?'Mesa '+esc(cloud.code)+' · ':'')+'liquidaciones guardadas.</p>'+
+    '<div class="hist-list">'+rows+'</div>'+
+    '<div class="sheet-actions" style="margin-top:16px"><button class="sheet-btn cancel" style="flex:1" onclick="closeSheet()">Cerrar</button></div>';
+}
+function openClosure(i){
+  const c=histCache[i]; if(!c)return;
+  const people=(c.people||[]).slice().sort(function(a,b){return b.amt-a.amt;});
+  const rows=people.map(function(pp){
+    return '<div class="liq-row"><div class="liq-main"><div class="liq-name">'+esc(pp.name)+'</div>'+
+      (pp.ms?'<div class="liq-time">'+fmtTime(pp.ms)+' en mesa</div>':'')+'</div>'+
+      '<div class="liq-right"><span class="liq-amt">$'+money(pp.amt)+'</span><span class="liq-pct">'+((pp.pct||0)*100).toFixed(1)+'%</span></div></div>';
+  }).join('');
+  const bill=(c.bill||[]).map(function(b){
+    return '<div class="bill-row"><span class="bill-emoji">'+esc(b.emoji||'🍽️')+'</span><span class="bill-name">'+esc(b.name)+'</span>'+
+      '<span class="bill-qty">×'+b.qty+' · $'+money(b.price)+'</span><span class="bill-sub">$'+money(b.sub)+'</span></div>';
+  }).join('')||'<div class="empty">Sin consumos</div>';
+  document.getElementById('sheet').innerHTML=
+    '<div class="grabber"></div><h2>Cierre '+esc(histDate(c.closed_at))+'</h2>'+
+    '<p class="desc">'+(c.tip?c.tip+'% propina · ':'')+(c.override?'ajustada al total real · ':'')+(c.people?c.people.length:0)+' personas.</p>'+
+    '<div class="liq-list">'+rows+'</div>'+
+    '<div class="liq-grand"><span>Total'+(c.tip?' con propina':'')+'</span><b>$'+money(c.grand)+'</b></div>'+
+    '<div class="field-label">La cuenta</div><div class="bill-list">'+bill+'</div>'+
+    '<div class="sheet-actions" style="margin-top:16px">'+
+      '<button class="sheet-btn confirm" style="background:var(--gold);color:#231c00" onclick="copyClosure('+i+')">Copiar resumen</button>'+
+    '</div>'+
+    '<div class="sheet-actions" style="margin-top:9px"><button class="sheet-btn cancel" style="flex:1" onclick="drawHistory()">← Volver al historial</button></div>';
+}
+function copyClosure(i){
+  const c=histCache[i]; if(!c)return;
+  const people=(c.people||[]).slice().sort(function(a,b){return b.amt-a.amt;});
+  let txt='🍺 Ronda — Cierre '+histDate(c.closed_at)+'\n';
+  if(c.code)txt+='Mesa '+c.code+'\n';
+  if(c.tip)txt+='('+c.tip+'% propina)\n';
+  txt+='Total: $'+money(c.grand)+'\n————\n'+people.map(function(pp){return pp.name+': $'+money(pp.amt)+' ('+((pp.pct||0)*100).toFixed(1)+'%)';}).join('\n');
+  txt+='\n————\nLa cuenta:\n'+(c.bill||[]).map(function(b){return b.name+' ×'+b.qty+': $'+money(b.sub);}).join('\n');
+  copyText(txt,'Cierre copiado');
 }
 
 /* ── init ── */
