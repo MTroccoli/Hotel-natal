@@ -414,6 +414,36 @@ input[type=number]{-moz-appearance:textfield;}
 .cf-btn.yes{background:var(--active);color:#fff;}
 .cf-btn.yes:active{opacity:.88;}
 
+/* ── Liquidación ── */
+.settle-btn{
+  width:100%;height:50px;margin-top:9px;border:none;border-radius:var(--radius);
+  background:var(--gold);color:#231c00;font-family:inherit;font-size:15px;font-weight:700;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--shadow);
+}
+.settle-btn:active{opacity:.9;}
+.tip-label{font-size:11px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--text-2);margin:14px 0 8px;}
+.tip-row{display:flex;gap:7px;}
+.tip-chip{
+  flex:1;height:40px;border:1px solid var(--border);background:var(--chip);color:var(--text);
+  border-radius:9px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
+}
+.tip-chip.on{background:var(--gold);color:#231c00;border-color:var(--gold);}
+.liq-list{margin:10px 0 2px;}
+.liq-row{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--border);}
+.liq-row:last-child{border-bottom:none;}
+.liq-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;}
+.liq-main{flex:1;min-width:0;}
+.liq-name{font-size:14.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.liq-time{font-size:11.5px;color:var(--text-2);margin-top:1px;}
+.liq-amt{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;}
+.liq-amt.zero{color:var(--text-2);opacity:.6;}
+.liq-grand{
+  display:flex;justify-content:space-between;align-items:center;margin-top:14px;
+  padding:13px 15px;background:var(--surface-2);border-radius:12px;
+}
+.liq-grand span{font-size:13px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.6px;}
+.liq-grand b{font-size:23px;color:var(--gold);font-family:'Space Mono',monospace;}
+
 *:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -443,6 +473,7 @@ input[type=number]{-moz-appearance:textfield;}
       <button class="big-btn ghost" onclick="addPerson()">+ Persona</button>
       <button class="big-btn solid" onclick="openLoad()">＋ Cargar a la mesa</button>
     </div>
+    <button class="settle-btn" onclick="openSettle()">🧾 Cerrar y liquidar la mesa</button>
   </section>
 
   <!-- MENU -->
@@ -1043,6 +1074,67 @@ function drawCloud(){
        '<button class="sheet-btn cancel" style="flex:1" onclick="importPrompt()">Importar</button></div>'+
      '<div class="sheet-actions"><button class="sheet-btn cancel" style="flex:1" onclick="closeSheet()">Cerrar</button></div>';
   document.getElementById('sheet').innerHTML=h;
+}
+
+/* ══════════════ LIQUIDACIÓN ══════════════ */
+let settleTip=0;
+function openSettle(){
+  if(state.people.length===0){toast('No hay nadie en la mesa');return;}
+  settleTip=0; drawSettle(); document.getElementById('overlay').classList.add('show');
+}
+function setTip(t){settleTip=t;drawSettle();}
+function settleRows(){
+  const mult=1+settleTip/100;
+  return state.people.map(p=>({p,amt:personTotal(p.id)*mult})).sort((a,b)=>b.amt-a.amt);
+}
+function drawSettle(){
+  const mult=1+settleTip/100;
+  const grand=tableTotal()*mult;
+  const rows=settleRows().map(function(r){
+    const p=r.p, z=r.amt<=0;
+    return '<div class="liq-row">'+
+      '<span class="liq-av" style="background:'+avColor(p.id)+'">'+esc(initials(p.name,p.num))+'</span>'+
+      '<div class="liq-main"><div class="liq-name">'+esc(p.name||('Persona '+p.num))+'</div>'+
+        '<div class="liq-time">'+(p.leftAt?'se fue '+mvd(p.leftAt):'en mesa')+' · '+fmtTime(elapsed(p))+'</div></div>'+
+      '<span class="liq-amt'+(z?' zero':'')+'">$'+money(r.amt)+'</span>'+
+    '</div>';
+  }).join('');
+  const tipChips=[0,10,15].map(function(t){
+    return '<button class="tip-chip'+(settleTip===t?' on':'')+'" onclick="setTip('+t+')">'+(t===0?'Sin propina':t+'%')+'</button>';
+  }).join('');
+  document.getElementById('sheet').innerHTML=
+    '<div class="grabber"></div>'+
+    '<h2>Liquidación de la mesa</h2>'+
+    '<p class="desc">Lo que paga cada uno'+(settleTip?' (con '+settleTip+'% de propina)':'')+'. Copiá el resumen para el grupo.</p>'+
+    '<div class="tip-label">Propina</div>'+
+    '<div class="tip-row">'+tipChips+'</div>'+
+    '<div class="liq-list">'+rows+'</div>'+
+    '<div class="liq-grand"><span>Total'+(settleTip?' con propina':'')+'</span><b>$'+money(grand)+'</b></div>'+
+    '<div class="sheet-actions" style="margin-top:16px">'+
+      '<button class="sheet-btn confirm" style="background:var(--gold);color:#231c00" onclick="copySummary()">Copiar resumen</button>'+
+    '</div>'+
+    '<div class="sheet-actions" style="margin-top:9px">'+
+      '<button class="sheet-btn cancel" style="flex:1" onclick="closeSheet()">Volver</button>'+
+      '<button class="sheet-btn" style="flex:1;background:transparent;border:1px solid var(--accent);color:var(--accent)" onclick="askEmptyMesa()">Vaciar mesa</button>'+
+    '</div>';
+}
+function copySummary(){
+  const mult=1+settleTip/100;
+  const lines=settleRows().map(function(r){return (r.p.name||('Persona '+r.p.num))+': $'+money(r.amt);});
+  let txt='🍺 Ronda — Liquidación\n';
+  if(cloud)txt+='Mesa '+cloud.code+'\n';
+  if(settleTip)txt+='(incluye '+settleTip+'% de propina)\n';
+  txt+='Total: $'+money(tableTotal()*mult)+'\n————\n'+lines.join('\n');
+  copyText(txt,'Resumen copiado');
+}
+function askEmptyMesa(){
+  const html='<h3>¿Vaciar la mesa?</h3>'+
+    '<div class="cf-sub">Se borran todos los consumos y se reinician los cronómetros para empezar una ronda nueva. Las personas y el menú se mantienen.'+(cloud?' Afecta a TODOS en la mesa online.':'')+'</div>';
+  askConfirm(html,function(){
+    state.orders=[];
+    state.people.forEach(function(p){p.arrivedAt=Date.now();p.leftAt=null;p.accumulatedMs=0;});
+    save();render();closeSheet();toast('Mesa vaciada — nueva ronda');
+  });
 }
 
 /* ── init ── */
