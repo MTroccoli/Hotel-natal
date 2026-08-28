@@ -468,6 +468,13 @@ input[type=number]{-moz-appearance:textfield;}
 .hist-date{font-size:14px;font-weight:700;color:var(--text);}
 .hist-sub{font-size:12px;color:var(--text-2);margin-top:1px;}
 .hist-amt{font-family:'Space Mono',monospace;font-weight:700;font-size:16px;color:var(--gold);flex-shrink:0;}
+.recent-list{display:flex;flex-direction:column;gap:6px;margin-top:2px;}
+.recent-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 13px;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface-2);cursor:pointer;font-family:inherit;color:var(--text);
+}
+.recent-row:active{opacity:.85;}
 .liq-grand{
   display:flex;justify-content:space-between;align-items:center;margin-top:14px;
   padding:13px 15px;background:var(--surface-2);border-radius:12px;
@@ -1028,7 +1035,7 @@ async function createEvent(){
     const code=genCode();
     const {data,error}=await sb.from('ronda_events').insert({code}).select().single();
     if(error){ if(error.code==='23505')continue; toast('Error: '+(error.message||'no se pudo')); return; }
-    cloud={code,eventId:data.id}; persistCloud();
+    cloud={code,eventId:data.id}; persistCloud(); rememberMesa(code);
     lastPush=0; await pushAll();           // sube lo que ya tenías cargado
     try{location.hash='m='+code;}catch(e){}
     subscribeRealtime(); startPoll(); updateCloudBar('ok'); drawCloud(); render();
@@ -1044,13 +1051,64 @@ async function joinEvent(code,silent){
     const {data,error}=await sb.from('ronda_events').select('*').eq('code',code).maybeSingle();
     if(error)throw error;
     if(!data){ if(!silent)toast('No existe la mesa '+code); return; }
-    cloud={code,eventId:data.id}; persistCloud();
+    cloud={code,eventId:data.id}; persistCloud(); rememberMesa(code);
     try{location.hash='m='+code;}catch(e){}
     await pullAll(); subscribeRealtime(); startPoll(); updateCloudBar('ok');
     if(!silent){drawCloud();toast('Conectado a la mesa '+code);}
   }catch(e){ updateCloudBar('err'); if(!silent)toast('No se pudo conectar'); }
 }
 function joinFromInput(){const el=document.getElementById('joinCode');if(el)joinEvent(el.value);}
+
+/* ── Mesas recientes ── */
+function loadRecent(){try{return JSON.parse(localStorage.getItem('ronda-recent')||'[]');}catch(e){return [];}}
+function saveRecent(list){try{localStorage.setItem('ronda-recent',JSON.stringify(list.slice(0,10)));}catch(e){}}
+function rememberMesa(code){
+  if(!code)return;
+  const list=loadRecent().filter(function(m){return m.code!==code;});
+  list.unshift({code:code,at:Date.now()});
+  saveRecent(list);
+}
+
+/* ── Nueva mesa (registro nuevo, deja la anterior intacta) ── */
+function newMesaFlow(keepProducts){
+  toast('Creando mesa nueva…');
+  createFreshMesa(keepProducts);
+}
+async function createFreshMesa(keepProducts){
+  if(!sb){toast('Abrí la app desde el link online');return;}
+  const prevProducts=keepProducts? state.products.map(function(p){return {id:uid(),name:p.name,price:p.price,emoji:p.emoji};}) : [];
+  // Reset local state; NO tocamos la mesa anterior en la nube (queda con su código)
+  if(rtChannel){try{sb.removeChannel(rtChannel);}catch(e){}rtChannel=null;}
+  if(pollT){clearInterval(pollT);pollT=null;}
+  cloud=null; state={products:prevProducts.length?prevProducts:[],people:[],orders:[],expanded:null,view:'mesa'};
+  if(!prevProducts.length)seedProducts();
+  for(let i=0;i<8;i++)state.people.push(mkPerson(''));
+  save();
+  for(let attempt=0;attempt<5;attempt++){
+    const code=genCode();
+    const {data,error}=await sb.from('ronda_events').insert({code}).select().single();
+    if(error){if(error.code==='23505')continue; toast('Error: '+(error.message||'no se pudo')); render(); drawCloud(); return;}
+    cloud={code:code,eventId:data.id}; persistCloud(); rememberMesa(code);
+    lastPush=0; await pushAll();
+    try{location.hash='m='+code;}catch(e){}
+    subscribeRealtime(); startPoll(); updateCloudBar('ok');
+    render(); drawCloud(); toast('¡Mesa '+code+' lista!');
+    return;
+  }
+  toast('No se pudo generar un código, probá de nuevo');
+}
+function askNewMesa(){
+  const hasStuff=state.people.some(function(p){return p.name;})||state.orders.length>0;
+  const cur=cloud?' La mesa actual <b>'+esc(cloud.code)+'</b> queda intacta — la podés recuperar por su código.':'';
+  const html='<h3>¿Empezar una mesa nueva?</h3>'+
+    '<div class="cf-sub">Se crea una <b>mesa nueva</b> con código propio, desde cero.'+cur+'</div>';
+  askConfirm(html,function(){
+    const keep=state.products.some(function(p){return p.price>0;})&&hasStuff
+      ? confirm('¿Copiar el menú de productos (con precios) a la mesa nueva?\n\nOK = sí, copiar\nCancelar = arrancar con el menú por defecto')
+      : false;
+    newMesaFlow(keep);
+  });
+}
 function leaveCloud(){
   if(rtChannel){try{sb.removeChannel(rtChannel);}catch(e){}rtChannel=null;}
   if(pollT){clearInterval(pollT);pollT=null;}
@@ -1088,16 +1146,23 @@ function drawCloud(){
     '<button type="button" style="width:auto;padding:0 16px;font-size:14px" onclick="joinFromInput()">Unirme</button></div>';
   let h='<div class="grabber"></div><h2>Sincronizar la mesa</h2>';
   if(!sb) h+='<p class="desc" style="color:var(--accent)">Esta vista no puede conectarse a la base. Abrí la app desde el <b>link online</b> (GitHub), no desde la vista previa.</p>';
+  const recent=loadRecent().filter(function(m){return !cloud||m.code!==cloud.code;});
+  const recentBox=recent.length? '<div class="field-label">Mesas recientes</div><div class="recent-list">'+recent.slice(0,6).map(function(m){
+    return '<button class="recent-row" onclick="joinEvent(\''+esc(m.code)+'\')"><span class="mono" style="font-weight:700;letter-spacing:1.5px">'+esc(m.code)+'</span><span style="font-size:11px;color:var(--text-2)">'+esc(histDate(new Date(m.at).toISOString()))+'</span></button>';
+  }).join('')+'</div>' : '';
+
   if(cloud){
     h+='<p class="desc">Mesa online: todos los que tengan el código ven y editan lo mismo, en vivo.</p>'+
        '<div class="cloud-code-big mono">'+esc(cloud.code)+'</div>'+
        '<div class="sheet-actions" style="margin-top:12px"><button class="sheet-btn confirm" onclick="copyLink()">Copiar link para compartir</button></div>'+
-       '<div class="field-label">Cambiar de mesa</div>'+joinBox+
+       '<div class="sheet-actions" style="margin-top:9px"><button class="sheet-btn confirm" style="background:var(--active)" onclick="askNewMesa()">＋ Nueva mesa (código nuevo)</button></div>'+
+       '<div class="field-label">Volver a otra mesa</div>'+joinBox+recentBox+
        '<button class="pick-all" onclick="leaveCloud()" style="color:var(--text-2)">Desconectar de esta mesa</button>';
   } else {
     h+='<p class="desc">Guardá esta mesa en la nube para no perderla y compartirla con los demás en vivo. Se sube lo que ya tenés cargado.</p>'+
        '<button class="sheet-btn confirm" style="width:100%" onclick="createEvent()">Crear mesa online y subir lo cargado</button>'+
-       '<div class="field-label">¿Ya tenés un código?</div>'+joinBox;
+       '<div class="sheet-actions" style="margin-top:9px"><button class="sheet-btn confirm" style="background:var(--active)" onclick="askNewMesa()">＋ Mesa nueva desde cero</button></div>'+
+       '<div class="field-label">¿Ya tenés un código?</div>'+joinBox+recentBox;
   }
   h+='<div class="field-label">Historial</div>'+
      '<button class="sheet-btn cancel" style="width:100%" onclick="openHistory()">📖 Ver historial de cierres</button>'+
